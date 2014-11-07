@@ -1,4 +1,4 @@
-var jsonsql = function(jsonObject) {
+function jsonsql(jsonObject) {
 	this.db = jsonObject;
 };
 
@@ -12,7 +12,7 @@ var jsonsql = function(jsonObject) {
  * @param  {String} tablePath   json path that must be queried
  * @return {Array}
  */
-jsonsql.Prototype.query = function(columnNames, tablePath) {
+jsonsql.prototype.query = function(columnNames, tablePath) {
 	var table = jsonUtils.getJsonNode(this.db, tablePath),
 		columns, queryResult;
 	
@@ -33,10 +33,10 @@ jsonsql.Prototype.query = function(columnNames, tablePath) {
 	if (_.isArray(table)) {
 		queryResult = [];
 		_.each(table, function(tableRow) {
-			queryResult.push(_.pick(tableRow, columns));
+			queryResult.push(jsonUtils.pickProperties(tableRow, columns));
 		});
 	} else {
-		queryResult = _.pick(table, columns);
+		queryResult = jsonUtils.pickProperties(table, columns);
 	}
 	return queryResult;
 };
@@ -50,7 +50,7 @@ jsonsql.Prototype.query = function(columnNames, tablePath) {
  * @param  table 
  * @return {Boolean}
  */
-jsonsql.Prototype.isTableQueryable = function(table) {
+jsonsql.prototype.isTableQueryable = function(table) {
 	return (!_.isUndefined(table) && !_.isFunction(table) && (_.isArray(table) || _.isObject(table)));
 };
 
@@ -60,8 +60,8 @@ jsonsql.Prototype.isTableQueryable = function(table) {
  * @param  {Object | Array} table
  * @return {Array} columnNames
  */
-jsonsql.Prototype.getColumnNames = function(columnsList, table) {
-	var columns = [], tableObj, 
+jsonsql.prototype.getColumnNames = function(columnsList, table) {
+	var columns = [], tableObj; 
 	if (_.isArray(table)) {
 		tableObj = table[0];
 	}
@@ -96,7 +96,7 @@ jsonsql.Prototype.getColumnNames = function(columnsList, table) {
  * @param  {Object} tableObj
  * @return {Boolean}
  */
-jsonsql.Prototype.isValidColumn = function(columns, tableObj) {
+jsonsql.prototype.isValidColumn = function(columns, tableObj) {
 	var isValidColumn = true, columnName, valueObj;
 	
 	for (var i = 0; i < columns.length; i++) {
@@ -110,7 +110,7 @@ jsonsql.Prototype.isValidColumn = function(columns, tableObj) {
 		//a. the path is correct
 		//b. the path does not lead to array or an object or a function
 		if (jsonUtils.isJsonPath(columnName)) {
-			valueObj = jsonUtils.getJsonNode(columnName, tableObj);
+			valueObj = jsonUtils.getJsonNode(tableObj, columnName);
 			if(_.isUndefined(valueObj) || _.isFunction(valueObj) || _.isArray(valueObj) || _.isObject(valueObj)) {
 				isValidColumn = false;
 				break;
@@ -130,7 +130,9 @@ jsonsql.Prototype.isValidColumn = function(columns, tableObj) {
 };
 
 
-
+/**
+ * JSON Utilities and helpers
+ */
 var jsonUtils = function() {
 
 	/**
@@ -139,7 +141,7 @@ var jsonUtils = function() {
      * @param {String} path
      * @return {Array|Object|null}
      */
-    this.getJsonNode: function(obj, path) {
+    this.getJsonNode = function(obj, path) {
         var args = path.split('.');
         for (var i = 0; i < args.length; i++) {
             if (_.isNull(obj) || _.isUndefined(obj) || !obj.hasOwnProperty(args[i])) {
@@ -148,14 +150,50 @@ var jsonUtils = function() {
             obj = obj[args[i]];
         }
         return obj;
-    },
+    };
 
     /**
      * tells if a string is a json path
      * @param  {String}  jsonPath
      * @return {Boolean}
      */
-    this.isJsonPath: function(jsonPath) {
+    this.isJsonPath = function(jsonPath) {
     	return jsonPath.indexOf(".") !== -1;
-    }
-};
+    };
+
+    /**
+     * picks a list of properties from an object
+     * @param  {Object} obj
+     * @param  {Array} properties
+     * @param  {Array} aliases optional
+     * @return {Object}
+     */
+    this.pickProperties = function(obj, properties, aliases) {
+    	var result = {}, tmpValue;
+
+    	if(_.isUndefined(aliases)) {
+    		aliases = [];
+    		_.each(properties, function(key) {
+    			if(this.isJsonPath(key)) {
+    				aliases.push(key.split('.').join('->'));
+    			} else {
+    				aliases.push(key);
+    			}
+    		});
+    	}
+
+    	_.each(properties, function(key, index) {
+    		if(this.isJsonPath(key)) {
+    			tmpValue = this.getJsonNode(obj, key);
+    			if (!_.isUndefined(tmpValue)) {
+    				result[aliases[index]] = tmpValue;
+    			}
+    		} else if(obj.hasOwnProperty(key)) {
+    			result[aliases[index]] = obj[key];
+    		}
+    	});
+    	return result;
+    };
+
+    return this;
+}();
