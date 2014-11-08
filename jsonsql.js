@@ -1,5 +1,6 @@
 function jsonsql(jsonObject) {
 	this.db = jsonObject;
+	this.jsonPathSeparator = '->';
 };
 
 /**
@@ -33,10 +34,10 @@ jsonsql.prototype.query = function(columnNames, tablePath) {
 	if (_.isArray(table)) {
 		queryResult = [];
 		_.each(table, function(tableRow) {
-			queryResult.push(jsonUtils.pickProperties(tableRow, columns));
-		});
+			queryResult.push(this.pickProperties(tableRow, columns));
+		}, this);
 	} else {
-		queryResult = jsonUtils.pickProperties(table, columns);
+		queryResult = this.pickProperties(table, columns);
 	}
 	return queryResult;
 };
@@ -129,6 +130,42 @@ jsonsql.prototype.isValidColumn = function(columns, tableObj) {
 	return isValidColumn;
 };
 
+/**
+ * picks a list of properties from an object
+ * @param  {Object} obj
+ * @param  {Array} properties
+ * @param  {Array} aliases aliases for columns optional
+ * @return {Object}
+ */
+jsonsql.prototype.pickProperties = function(obj, properties, aliases) {
+	var result = {}, tmpValue;
+
+	//if aliases are not defined we need to defined them as name of properties
+	//if the properties are json paths then create the aliases from the json paths
+	if(_.isUndefined(aliases)) {
+		aliases = [];
+		_.each(properties, function(key) {
+			if(jsonUtils.isJsonPath(key)) {
+				aliases.push(key.split('.').join(this.jsonPathSeparator));
+			} else {
+				aliases.push(key);
+			}
+		}, this);
+	}
+
+	//extract the properties from the object and return a result object
+	_.each(properties, function(key, index) {
+		if(jsonUtils.isJsonPath(key)) {
+			tmpValue = jsonUtils.getJsonNode(obj, key);
+			if (!_.isUndefined(tmpValue)) {
+				result[aliases[index]] = tmpValue;
+			}
+		} else if(obj.hasOwnProperty(key)) {
+			result[aliases[index]] = obj[key];
+		}
+	});
+	return result;
+};
 
 /**
  * JSON Utilities and helpers
@@ -159,40 +196,6 @@ var jsonUtils = function() {
      */
     this.isJsonPath = function(jsonPath) {
     	return jsonPath.indexOf(".") !== -1;
-    };
-
-    /**
-     * picks a list of properties from an object
-     * @param  {Object} obj
-     * @param  {Array} properties
-     * @param  {Array} aliases optional
-     * @return {Object}
-     */
-    this.pickProperties = function(obj, properties, aliases) {
-    	var result = {}, tmpValue;
-
-    	if(_.isUndefined(aliases)) {
-    		aliases = [];
-    		_.each(properties, function(key) {
-    			if(this.isJsonPath(key)) {
-    				aliases.push(key.split('.').join('->'));
-    			} else {
-    				aliases.push(key);
-    			}
-    		});
-    	}
-
-    	_.each(properties, function(key, index) {
-    		if(this.isJsonPath(key)) {
-    			tmpValue = this.getJsonNode(obj, key);
-    			if (!_.isUndefined(tmpValue)) {
-    				result[aliases[index]] = tmpValue;
-    			}
-    		} else if(obj.hasOwnProperty(key)) {
-    			result[aliases[index]] = obj[key];
-    		}
-    	});
-    	return result;
     };
 
     return this;
